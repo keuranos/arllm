@@ -37,4 +37,7 @@ dependencies {
 
     // ComponentActivity
     implementation("androidx.activity:activity-ktx:1.9.2")
+
+    // ARCore
+    implementation("com.google.ar:core:1.43.0")
 }

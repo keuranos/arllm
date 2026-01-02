@@ -10,6 +10,7 @@ import kotlin.math.min
 class GatewayServer(
     private val bt: BluetoothController,
     private val sensors: SensorHub,
+    private val arCore: ArCoreTracker,
     private val webHtml: String
 ) : NanoHTTPD(8765) {
 
@@ -41,6 +42,19 @@ class GatewayServer(
                 uri == "/sensors.json" -> {
                     val json = sensors.toJson()
                     val resp = newFixedLengthResponse(Response.Status.OK, "application/json", json)
+                    resp.addHeader("Cache-Control", "no-cache, no-store, must-revalidate")
+                    resp.addHeader("Pragma", "no-cache")
+                    resp
+                }
+
+                uri == "/arcore.json" -> {
+                    val pose = arCore.latest()
+                    val payload = if (pose == null) {
+                        """{"available":false,"running":${arCore.isRunning()}}"""
+                    } else {
+                        """{"available":true,"running":${arCore.isRunning()},"trackingState":"${pose.trackingState}","timestampNs":${pose.timestampNs},"position":${pose.position},"rotation":${pose.rotation}}"""
+                    }
+                    val resp = newFixedLengthResponse(Response.Status.OK, "application/json", payload)
                     resp.addHeader("Cache-Control", "no-cache, no-store, must-revalidate")
                     resp.addHeader("Pragma", "no-cache")
                     resp

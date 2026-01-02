@@ -11,6 +11,9 @@
     <!-- Activity recognition (step counter, etc.) -->
     <uses-permission android:name="android.permission.ACTIVITY_RECOGNITION" />
 
+    <!-- ARCore (optional) -->
+    <uses-feature android:name="android.hardware.camera.ar" android:required="false" />
+
     <!-- Bluetooth legacy -->
     <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
@@ -26,6 +29,10 @@
         android:label="Ramblebot Gateway"
         android:supportsRtl="true"
         android:theme="@style/Theme.RamblebotGateway">
+
+        <meta-data
+            android:name="com.google.ar.core"
+            android:value="optional" />
 
         <activity
             android:name=".MainActivity"

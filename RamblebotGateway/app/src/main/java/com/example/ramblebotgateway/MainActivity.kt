@@ -26,6 +26,7 @@ class MainActivity : ComponentActivity() {
     private var bt: BluetoothController? = null
     private var server: GatewayServer? = null
     private lateinit var sensors: SensorHub
+    private lateinit var arCore: ArCoreTracker
 
     private lateinit var status: TextView
     private lateinit var macEdit: EditText
@@ -36,6 +37,8 @@ class MainActivity : ComponentActivity() {
     private val REQ_ACTIVITY = 1003
 
     private val cameraExecutor = Executors.newSingleThreadExecutor()
+    private val useArCore = true
+    private var arCoreEnabled = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -45,13 +48,16 @@ class MainActivity : ComponentActivity() {
         macEdit = findViewById(R.id.macEdit)
         connectBtn = findViewById(R.id.connectBtn)
 
-        sensors = SensorHub(this)
-        sensors.start()
+        sensors = SensorHub(this).also { it.start() }
+        arCore = ArCoreTracker(this)
+        arCoreEnabled = useArCore && arCore.start()
 
         ensureActivityRecognition()
 
         // Start camera if permitted (MJPEG feed)
-        ensureCamera()
+        if (!arCoreEnabled) {
+            ensureCamera()
+        }
 
         connectBtn.setOnClickListener {
             if (!hasBtPermissions()) {
@@ -75,7 +81,7 @@ class MainActivity : ComponentActivity() {
                     bt!!.connect()
 
                     if (server == null) {
-                        server = GatewayServer(bt!!, sensors, WebUi.html())
+                        server = GatewayServer(bt!!, sensors, arCore, WebUi.html())
                         server!!.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
                     }
 
@@ -96,6 +102,7 @@ class MainActivity : ComponentActivity() {
         try { server?.stop() } catch (_: Exception) {}
         try { bt?.close() } catch (_: Exception) {}
         sensors.stop()
+        arCore.stop()
         cameraExecutor.shutdown()
     }
 

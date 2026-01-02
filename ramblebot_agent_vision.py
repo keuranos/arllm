@@ -2,7 +2,8 @@ import base64
 import json
 import time
 import hashlib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -23,12 +24,14 @@ SESSION = requests.Session()
 
 STREAM_URL = f"{GATEWAY_BASE}/stream.mjpeg"
 FRAME_READ_TIMEOUT = 8.0
+SENSORS_URL = f"{GATEWAY_BASE}/sensors.json"
 
 # Safety limits
 MAX_SPEED = 170
 MAX_MS = 1200
 MAX_STEPS = 80
 STEP_DELAY = 0.12
+MAX_ACTIONS_PER_STEP = 6
 
 # Movement defaults
 FWD_L, FWD_R, FWD_MS = 145, 145, 520
@@ -51,7 +54,10 @@ You will receive:
 - telemetry: includes detections from vision:
   - persons[]: normalized bbox and center coordinates
   - opening: {score, center_x, center_y, bbox_norm} for a doorway-like opening (heuristic)
+  - sensors: summarized phone sensor data (motion, orientation, proximity, light)
 - history: what was executed recently
+- memory_summary: a short summary of recent behavior
+- state: current high-level mode (observe/plan/act/recover)
 
 You MUST respond ONLY with JSON.
 
@@ -74,6 +80,7 @@ How to use detections:
 Policy (important):
 - Do not get stuck doing head-only moves. If uncertain, do a small turn and/or a short forward step.
 - Prefer short motions (200-800ms) then stop.
+- Avoid repeating the same action if the image is not changing.
 - Output only JSON.
 """
 
@@ -83,6 +90,23 @@ Policy (important):
 class Safety:
     max_speed: int = MAX_SPEED
     max_ms: int = MAX_MS
+
+
+class Mode(Enum):
+    OBSERVE = "observe"
+    PLAN = "plan"
+    ACT = "act"
+    RECOVER = "recover"
+
+
+@dataclass
+class AgentState:
+    mode: Mode = Mode.OBSERVE
+    stall_count: int = 0
+    error_count: int = 0
+    last_action_fp: Optional[str] = None
+    memory_summary: str = ""
+    recent_actions: List[str] = field(default_factory=list)
 
 
 def clamp(x: int, lo: int, hi: int) -> int:
@@ -112,6 +136,14 @@ def fp_delta(prev: Optional[str], cur: str) -> float:
         return 1.0
     dif = sum(1 for a, b in zip(prev, cur) if a != b)
     return dif / max(1, len(cur))
+
+
+def safe_json_loads(text: str) -> Dict[str, Any]:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        cleaned = strip_fences(text)
+        return json.loads(cleaned)
 
 
 # ---------------- MJPEG GRAB ----------------
@@ -145,6 +177,50 @@ def get_mjpeg_frame(url: str) -> bytes:
         if time.time() - t0 > FRAME_READ_TIMEOUT:
             r.close()
             raise TimeoutError("Timed out reading MJPEG frame")
+
+
+def fetch_sensors() -> Optional[Dict[str, Any]]:
+    try:
+        r = SESSION.get(SENSORS_URL, timeout=TIMEOUT)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return None
+
+
+def summarize_sensors(raw: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    if not raw:
+        return {"available": False}
+
+    sensors = raw.get("sensors", [])
+    summary = {
+        "available": True,
+        "sensor_count": raw.get("sensorCount", len(sensors)),
+        "motion": {},
+        "environment": {},
+    }
+
+    def find_by_type(substr: str) -> Optional[Dict[str, Any]]:
+        for item in sensors:
+            st = str(item.get("stringType", "")).lower()
+            name = str(item.get("name", "")).lower()
+            if substr in st or substr in name:
+                return item
+        return None
+
+    def extract_values(item: Optional[Dict[str, Any]]) -> Optional[List[float]]:
+        if not item or not item.get("hasReading"):
+            return None
+        return item.get("values")
+
+    summary["motion"]["accelerometer"] = extract_values(find_by_type("accelerometer"))
+    summary["motion"]["gyroscope"] = extract_values(find_by_type("gyroscope"))
+    summary["motion"]["gravity"] = extract_values(find_by_type("gravity"))
+    summary["motion"]["rotation_vector"] = extract_values(find_by_type("rotation_vector"))
+    summary["environment"]["light"] = extract_values(find_by_type("light"))
+    summary["environment"]["proximity"] = extract_values(find_by_type("proximity"))
+
+    return summary
 
 
 # ---------------- IMAGE DECODE ----------------
@@ -335,21 +411,31 @@ def detect_opening(img_bgr: np.ndarray) -> Dict[str, Any]:
 
 
 # ---------------- OLLAMA STEP ----------------
-def ollama_plan(task: str, image_b64: str, telemetry: Dict[str, Any], history: List[str]) -> Dict[str, Any]:
+def build_prompt(
+    task: str,
+    telemetry: Dict[str, Any],
+    history: List[str],
+    memory_summary: str,
+    state: AgentState,
+) -> str:
     short_hist = history[-10:]
-    prompt = (
+    return (
         SYSTEM
         + "\n\nTASK:\n" + task
+        + "\n\nSTATE:\n" + state.mode.value
+        + "\n\nMEMORY SUMMARY:\n" + (memory_summary or "(none)")
         + "\n\nTELEMETRY:\n" + json.dumps(telemetry, ensure_ascii=False)
         + "\n\nHISTORY (most recent last):\n" + "\n".join(short_hist)
         + "\n\nReturn next action(s) JSON now."
     )
 
+
+def ollama_plan(prompt: str, image_b64: str) -> Dict[str, Any]:
     payload = {"model": MODEL, "prompt": prompt, "images": [image_b64], "stream": False}
     r = SESSION.post(f"{OLLAMA_BASE}/api/generate", json=payload, timeout=TIMEOUT)
     r.raise_for_status()
-    content = strip_fences(r.json().get("response", ""))
-    return json.loads(content)
+    content = r.json().get("response", "")
+    return safe_json_loads(content)
 
 
 # ---------------- GATEWAY ACTIONS ----------------
@@ -382,6 +468,30 @@ def normalize_actions(obj: Dict[str, Any]) -> List[Dict[str, Any]]:
     if "action" in obj:
         return [obj]
     return []
+
+
+def validate_actions(actions: List[Dict[str, Any]], safety: Safety) -> List[Dict[str, Any]]:
+    cleaned: List[Dict[str, Any]] = []
+    for a in actions:
+        kind = a.get("action")
+        if kind not in {"drive", "head", "stop", "done"}:
+            continue
+        if kind == "drive":
+            l = clamp(int(a.get("l", 0)), -safety.max_speed, safety.max_speed)
+            r = clamp(int(a.get("r", 0)), -safety.max_speed, safety.max_speed)
+            ms = clamp(int(a.get("ms", 400)), 50, safety.max_ms)
+            cleaned.append({"action": "drive", "l": l, "r": r, "ms": ms, "note": a.get("note", "")})
+        elif kind == "head":
+            pos = clamp(int(a.get("pos", 90)), 0, 180)
+            speed = clamp(int(a.get("speed", 0)), 0, 9)
+            cleaned.append({"action": "head", "pos": pos, "speed": speed, "note": a.get("note", "")})
+        elif kind == "stop":
+            cleaned.append({"action": "stop", "note": a.get("note", "")})
+        elif kind == "done":
+            cleaned.append({"action": "done", "result": a.get("result", "done")})
+        if len(cleaned) >= MAX_ACTIONS_PER_STEP:
+            break
+    return cleaned
 
 
 def execute(actions: List[Dict[str, Any]], safety: Safety, history: List[str]) -> Tuple[bool, Optional[str]]:
@@ -511,10 +621,18 @@ def reflex_for_task(task: str, telemetry: Dict[str, Any], step: int) -> Optional
     return None
 
 
+def summarize_history(history: List[str]) -> str:
+    if len(history) <= 6:
+        return " | ".join(history)
+    tail = history[-6:]
+    return " ... | " + " | ".join(tail)
+
+
 # ---------------- MAIN LOOP ----------------
 def run_task(task: str, detector: PersonDetector):
     safety = Safety()
     history: List[str] = []
+    state = AgentState()
 
     print(f"\nTASK START: {task}\n")
     try:
@@ -524,10 +642,9 @@ def run_task(task: str, detector: PersonDetector):
         pass
 
     prev_fp: Optional[str] = None
-    stall_count = 0
-
     for step in range(1, MAX_STEPS + 1):
         try:
+            state.mode = Mode.OBSERVE
             jpeg = get_mjpeg_frame(STREAM_URL)
             fp = quick_fp(jpeg)
             delta = fp_delta(prev_fp, fp)
@@ -538,20 +655,26 @@ def run_task(task: str, detector: PersonDetector):
             # Vision detections
             persons = detector.detect(img)
             opening = detect_opening(img)
+            sensors_raw = fetch_sensors()
+            sensors_summary = summarize_sensors(sensors_raw)
 
             telemetry = {
                 "step": step,
                 "image_delta": round(delta, 3),
                 "persons": persons[:3],  # max 3
                 "opening": opening if float(opening.get("score", 0.0)) > 0 else {"score": 0.0},
-                "stall_count": stall_count,
+                "stall_count": state.stall_count,
+                "sensors": sensors_summary,
             }
 
             img_b64 = jpeg_to_b64(jpeg)
 
             # LLM plan
-            model_out = ollama_plan(task, img_b64, telemetry, history)
+            state.mode = Mode.PLAN
+            prompt = build_prompt(task, telemetry, history, state.memory_summary, state)
+            model_out = ollama_plan(prompt, img_b64)
             actions = normalize_actions(model_out)
+            actions = validate_actions(actions, safety)
 
             # Debug
             print(f"\n[step {step}] TELEMETRY:")
@@ -561,26 +684,29 @@ def run_task(task: str, detector: PersonDetector):
 
             # stall logic: head-only repeats
             if actions and all(a.get("action") == "head" for a in actions):
-                stall_count += 1
+                state.stall_count += 1
             elif actions:
-                stall_count = 0
+                state.stall_count = 0
 
             # Reflex override if model stalls or returns nothing
-            if (not actions) or stall_count >= 2:
+            if (not actions) or state.stall_count >= 2 or delta < 0.02:
+                state.mode = Mode.RECOVER
                 fb = reflex_for_task(task, telemetry, step)
                 if fb:
                     print(f"[step {step}] REFLEX OVERRIDE:")
                     print(json.dumps({"actions": fb}, ensure_ascii=False))
                     done, result = execute(fb, safety, history)
-                    stall_count = 0
+                    state.stall_count = 0
                     if done:
                         print("\nTASK DONE:", result)
                         return
                     continue
 
             # Execute model actions
+            state.mode = Mode.ACT
             done, result = execute(actions, safety, history)
             print(f"[step {step}] EXECUTED {len(actions)} action(s)")
+            state.memory_summary = summarize_history(history)
             if done:
                 print("\nTASK DONE:", result)
                 return
@@ -598,8 +724,13 @@ def run_task(task: str, detector: PersonDetector):
                 do_stop()
             except Exception:
                 pass
+            state.error_count += 1
             history.append(f"ERR: {repr(e)}")
             time.sleep(0.3)
+            if state.error_count >= 3:
+                print("[recover] Too many errors, pausing briefly.")
+                time.sleep(1.0)
+                state.error_count = 0
 
     print("\nTASK END: reached MAX_STEPS, stopping.")
     try:

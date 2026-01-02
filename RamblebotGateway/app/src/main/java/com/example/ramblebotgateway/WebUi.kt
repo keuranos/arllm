@@ -109,6 +109,18 @@ object WebUi {
       <pre id="sensorOut" class="mono" style="white-space:pre-wrap;"></pre>
     </div>
 
+    <div class="card">
+      <div class="row" style="justify-content:space-between;">
+        <div><b>ARCore pose</b> <span class="hint">(room tracking)</span></div>
+        <div class="row">
+          <button id="arRefresh">Refresh</button>
+          <label class="small"><input id="arAuto" type="checkbox" checked/> Auto</label>
+        </div>
+      </div>
+      <div class="hint mono">/arcore.json</div>
+      <pre id="arOut" class="mono" style="white-space:pre-wrap;"></pre>
+    </div>
+
   </div>
 
 <script>
@@ -262,6 +274,34 @@ sensorRefresh.onclick = loadSensors;
 sensorAuto.onchange = setSensorTimer;
 loadSensors();
 setSensorTimer();
+
+// ✅ ARCore pose feed
+const arOut = document.getElementById('arOut');
+const arRefresh = document.getElementById('arRefresh');
+const arAuto = document.getElementById('arAuto');
+let arTimer = null;
+
+async function loadAr(){
+  try {
+    const resp = await fetch('/arcore.json', {cache: 'no-store'});
+    const text = await resp.text();
+    arOut.textContent = text;
+  } catch (e) {
+    arOut.textContent = "ARCore fetch failed: " + e;
+  }
+}
+
+function setArTimer(){
+  if(arTimer) clearInterval(arTimer);
+  if(arAuto.checked){
+    arTimer = setInterval(loadAr, 1000);
+  }
+}
+
+arRefresh.onclick = loadAr;
+arAuto.onchange = setArTimer;
+loadAr();
+setArTimer();
 </script>
 </body>
 </html>
