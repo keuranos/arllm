@@ -1,7 +1,6 @@
 package com.example.ramblebotgateway
 
 import android.content.Context
-import android.graphics.SurfaceTexture
 import android.os.Build
 import android.util.Log
 import com.google.ar.core.Config
@@ -19,7 +18,6 @@ data class ArCorePose(
 
 class ArCoreTracker(private val context: Context) {
     private var session: Session? = null
-    private var surfaceTexture: SurfaceTexture? = null
     private val running = AtomicBoolean(false)
     private var thread: Thread? = null
 
@@ -36,9 +34,7 @@ class ArCoreTracker(private val context: Context) {
                 }
                 configure(config)
             }
-            surfaceTexture = SurfaceTexture(0).also {
-                session?.setCameraTextureName(it)
-            }
+            session?.setCameraTextureName(0)
             session?.resume()
             running.set(true)
             thread = Thread { loop() }.also { it.start() }
@@ -57,8 +53,6 @@ class ArCoreTracker(private val context: Context) {
         try { session?.pause() } catch (_: Exception) {}
         try { session?.close() } catch (_: Exception) {}
         session = null
-        try { surfaceTexture?.release() } catch (_: Exception) {}
-        surfaceTexture = null
     }
 
     fun isRunning(): Boolean = running.get()
