@@ -43,6 +43,7 @@ import cv2
 from ultralytics import YOLO
 
 # Our modules
+from config import Config
 from depth_estimator import estimate_depth, depth_to_telemetry
 from semantic_memory import SemanticMemory, Pose, LandmarkType, get_memory
 from pet_behaviors import PetBehaviors, ARCoreClient, Mood
@@ -50,24 +51,24 @@ from robot_speech import RobotSpeaker, RobotPersonality, CommentaryType
 
 
 # ========================
-# Configuration
+# Configuration (from config.py)
 # ========================
 
-OLLAMA_BASE = "http://192.168.86.250:11434"
-MODEL = "devstral-small-2:latest"
-GATEWAY_BASE = "http://192.168.86.35:8765"
+OLLAMA_BASE = Config.OLLAMA_BASE
+MODEL = Config.MODEL
+GATEWAY_BASE = Config.GATEWAY_BASE
 
-TIMEOUT = 30
+TIMEOUT = Config.TIMEOUT
 SESSION = requests.Session()
 
-STREAM_URL = f"{GATEWAY_BASE}/stream.mjpeg"
+STREAM_URL = Config.stream_url()
 FRAME_READ_TIMEOUT = 8.0
-SENSORS_URL = f"{GATEWAY_BASE}/sensors.json"
+SENSORS_URL = Config.sensors_url()
 
 # Safety limits
-MAX_SPEED = 170
-MAX_MS = 1200
-MAX_STEPS = 100
+MAX_SPEED = Config.MAX_SPEED
+MAX_MS = Config.MAX_MS
+MAX_STEPS = Config.MAX_STEPS
 STEP_DELAY = 0.15
 MAX_ACTIONS_PER_STEP = 6
 
@@ -77,18 +78,18 @@ TURN_SPEED, TURN_MS = 150, 420
 APPROACH_L, APPROACH_R, APPROACH_MS = 120, 120, 450
 
 # Vision tuning
-PERSON_CONF_MIN = 0.35
+PERSON_CONF_MIN = Config.PERSON_CONF_MIN
 
 # Opening heuristic tuning
-OPENING_MIN_SCORE = 0.55
-OPENING_APPROACH_SCORE = 0.70
+OPENING_MIN_SCORE = Config.OPENING_MIN_SCORE
+OPENING_APPROACH_SCORE = Config.OPENING_APPROACH_SCORE
 
 # Enable/disable depth estimation (can be slow without GPU)
-USE_MIDAS_DEPTH = True
+USE_MIDAS_DEPTH = Config.USE_MIDAS_DEPTH
 
 # Enable/disable Finnish speech commentary
-USE_SPEECH = True
-SPEECH_CHATTINESS = 0.6  # 0-1, how often the robot comments
+USE_SPEECH = Config.USE_SPEECH
+SPEECH_CHATTINESS = Config.SPEECH_CHATTINESS
 
 
 # ========================

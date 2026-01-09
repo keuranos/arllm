@@ -22,9 +22,16 @@ import json
 # Configuration
 # ========================
 
-OLLAMA_BASE = "http://192.168.86.250:11434"
-SPEECH_MODEL = "devstral-small-2:latest"  # Or any model that knows Finnish
-GATEWAY_BASE = "http://192.168.86.35:8765"
+# Try to import config, fallback to defaults
+try:
+    from config import Config
+    OLLAMA_BASE = Config.OLLAMA_BASE
+    SPEECH_MODEL = Config.MODEL
+    GATEWAY_BASE = Config.GATEWAY_BASE
+except ImportError:
+    OLLAMA_BASE = "http://192.168.86.250:11434"
+    SPEECH_MODEL = "devstral-small-2:latest"
+    GATEWAY_BASE = "http://192.168.86.35:8765"
 
 SESSION = requests.Session()
 

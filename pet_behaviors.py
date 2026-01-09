@@ -21,6 +21,13 @@ import requests
 
 from semantic_memory import SemanticMemory, Pose, LandmarkType, get_memory
 
+# Try to import config, fallback to defaults
+try:
+    from config import Config
+    DEFAULT_GATEWAY = Config.GATEWAY_BASE
+except ImportError:
+    DEFAULT_GATEWAY = "http://192.168.86.35:8765"
+
 
 # ========================
 # ARCore Integration
@@ -29,7 +36,7 @@ from semantic_memory import SemanticMemory, Pose, LandmarkType, get_memory
 class ARCoreClient:
     """Client to fetch ARCore pose data from Android gateway."""
 
-    def __init__(self, gateway_base: str = "http://192.168.86.35:8765"):
+    def __init__(self, gateway_base: str = DEFAULT_GATEWAY):
         self.gateway_base = gateway_base
         self.arcore_url = f"{gateway_base}/arcore.json"
         self.session = requests.Session()
