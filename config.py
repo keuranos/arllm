@@ -5,9 +5,9 @@ Central configuration file for all Ramblebot modules.
 Settings can be overridden via environment variables.
 
 Environment Variables:
-    RAMBLEBOT_GATEWAY_IP    - Android phone IP (default: 192.168.86.35)
+    RAMBLEBOT_GATEWAY_IP    - Android phone IP (default: 192.168.101.102)
     RAMBLEBOT_GATEWAY_PORT  - Gateway port (default: 8765)
-    RAMBLEBOT_OLLAMA_IP     - Ollama server IP (default: 192.168.86.250)
+    RAMBLEBOT_OLLAMA_IP     - Ollama server IP (default: 192.168.101.100)
     RAMBLEBOT_OLLAMA_PORT   - Ollama port (default: 11434)
     RAMBLEBOT_MODEL         - LLM model name (default: devstral-small-2:latest)
     RAMBLEBOT_USE_DEPTH     - Enable MiDaS depth (default: true)
@@ -56,12 +56,12 @@ class Config:
     # ========================
 
     # Android Phone Gateway (camera, sensors, robot control, TTS)
-    GATEWAY_IP = _get_env("GATEWAY_IP", "192.168.86.35")
+    GATEWAY_IP = _get_env("GATEWAY_IP", "192.168.101.102")
     GATEWAY_PORT = int(_get_env("GATEWAY_PORT", "8765"))
     GATEWAY_BASE = f"http://{GATEWAY_IP}:{GATEWAY_PORT}"
 
     # Ollama LLM Server
-    OLLAMA_IP = _get_env("OLLAMA_IP", "192.168.86.250")
+    OLLAMA_IP = _get_env("OLLAMA_IP", "192.168.101.100")
     OLLAMA_PORT = int(_get_env("OLLAMA_PORT", "11434"))
     OLLAMA_BASE = f"http://{OLLAMA_IP}:{OLLAMA_PORT}"
 

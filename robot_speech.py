@@ -29,9 +29,9 @@ try:
     SPEECH_MODEL = Config.MODEL
     GATEWAY_BASE = Config.GATEWAY_BASE
 except ImportError:
-    OLLAMA_BASE = "http://192.168.86.250:11434"
+    OLLAMA_BASE = "http://192.168.101.100:11434"
     SPEECH_MODEL = "devstral-small-2:latest"
-    GATEWAY_BASE = "http://192.168.86.35:8765"
+    GATEWAY_BASE = "http://192.168.101.102:8765"
 
 SESSION = requests.Session()
 

@@ -7,18 +7,20 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import requests
 
-# ---- CONFIG ----
-OLLAMA_BASE = "http://192.168.86.250:11434"
-MODEL = "devstral-small-2:latest"  # varmista että mallisi tukee kuvia Ollamassa
-GATEWAY_BASE = "http://192.168.86.35:8765"
+from config import Config
 
-TIMEOUT = 30
+# ---- CONFIG ----
+OLLAMA_BASE = Config.OLLAMA_BASE
+MODEL = Config.MODEL  # varmista että mallisi tukee kuvia Ollamassa
+GATEWAY_BASE = Config.GATEWAY_BASE
+
+TIMEOUT = Config.TIMEOUT
 SESSION = requests.Session()
 
 # Safety limits
-MAX_SPEED = 170
-MAX_MS = 1200
-MAX_STEPS = 60
+MAX_SPEED = Config.MAX_SPEED
+MAX_MS = Config.MAX_MS
+MAX_STEPS = Config.MAX_STEPS
 STEP_DELAY = 0.15
 
 # MJPEG stream

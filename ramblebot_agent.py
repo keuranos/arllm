@@ -2,18 +2,20 @@ import json
 import time
 import requests
 
-OLLAMA_BASE = "http://192.168.86.250:11434"
-MODEL = "devstral-small-2:latest"  # löytyy /api/tags listasta
+from config import Config
+
+OLLAMA_BASE = Config.OLLAMA_BASE
+MODEL = Config.MODEL  # löytyy /api/tags listasta
 
 # Puhelimen RamblebotGateway
-GATEWAY_BASE = "http://192.168.86.35:8765"
+GATEWAY_BASE = Config.GATEWAY_BASE
 
 SESSION = requests.Session()
-TIMEOUT = 30
+TIMEOUT = Config.TIMEOUT
 
 # Turvarajat
-MAX_SPEED = 180
-MAX_MS = 1200
+MAX_SPEED = Config.MAX_SPEED
+MAX_MS = Config.MAX_MS
 
 
 SYSTEM = """You control a telepresence robot.
