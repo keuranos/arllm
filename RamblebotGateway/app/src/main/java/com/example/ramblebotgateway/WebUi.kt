@@ -124,36 +124,6 @@ object WebUi {
   </div>
 
 <script>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between;">
-        <div><b>Phone sensors</b> <span class="hint">(live JSON)</span></div>
-        <div class="row">
-          <button id="sensorRefresh">Refresh</button>
-          <label class="small"><input id="sensorAuto" type="checkbox" checked/> Auto</label>
-        </div>
-      </div>
-      <div class="hint mono">/sensors.json</div>
-      <pre id="sensorOut" class="mono" style="white-space:pre-wrap;"></pre>
-    </div>
-
-    <div class="card">
-      <div class="row" style="justify-content:space-between;">
-        <div><b>ARCore pose</b> <span class="hint">(room tracking)</span></div>
-        <div class="row">
-          <button id="arRefresh">Refresh</button>
-          <label class="small"><input id="arAuto" type="checkbox" checked/> Auto</label>
-        </div>
-      </div>
-      <div class="hint mono">/arcore.json</div>
-      <pre id="arOut" class="mono" style="white-space:pre-wrap;"></pre>
-    </div>
-
-  </div>
-
-<script>
 const last = document.getElementById('last');
 function api(url){
   last.textContent = url;
