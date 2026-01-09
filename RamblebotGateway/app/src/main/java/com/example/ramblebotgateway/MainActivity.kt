@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
     private var server: GatewayServer? = null
     private lateinit var sensors: SensorHub
     private lateinit var arCore: ArCoreTracker
+    private lateinit var ttsController: TTSController
 
     private lateinit var status: TextView
     private lateinit var macEdit: EditText
@@ -50,6 +51,7 @@ class MainActivity : ComponentActivity() {
 
         sensors = SensorHub(this).also { it.start() }
         arCore = ArCoreTracker(this)
+        ttsController = TTSController(this)
         arCoreEnabled = useArCore && arCore.start()
 
         ensureActivityRecognition()
@@ -81,7 +83,7 @@ class MainActivity : ComponentActivity() {
                     bt!!.connect()
 
                     if (server == null) {
-                        server = GatewayServer(bt!!, sensors, arCore, WebUi.html())
+                        server = GatewayServer(bt!!, sensors, arCore, ttsController, WebUi.html())
                         server!!.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false)
                     }
 
@@ -103,6 +105,7 @@ class MainActivity : ComponentActivity() {
         try { bt?.close() } catch (_: Exception) {}
         sensors.stop()
         arCore.stop()
+        ttsController.shutdown()
         cameraExecutor.shutdown()
     }
 

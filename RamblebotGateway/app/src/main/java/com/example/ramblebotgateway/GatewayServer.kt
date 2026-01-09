@@ -11,6 +11,7 @@ class GatewayServer(
     private val bt: BluetoothController,
     private val sensors: SensorHub,
     private val arCore: ArCoreTracker,
+    private val tts: TTSController,
     private val webHtml: String
 ) : NanoHTTPD(8765) {
 
@@ -61,6 +62,15 @@ class GatewayServer(
                 }
 
                 uri.startsWith("/cmd") -> handleCmd(session)
+
+                uri.startsWith("/speak") -> handleSpeak(session)
+
+                uri == "/tts.json" -> {
+                    val json = tts.toJson()
+                    val resp = newFixedLengthResponse(Response.Status.OK, "application/json", json)
+                    resp.addHeader("Cache-Control", "no-cache")
+                    resp
+                }
 
                 else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found")
             }
@@ -149,5 +159,48 @@ class GatewayServer(
         val speed = abs(clamped)
         val sss = speed.toString().padStart(3, '0')
         return dir to sss
+    }
+
+    /**
+     * Handle TTS speak requests.
+     * /speak?text=Hello&lang=fi-FI&queue=0
+     * /speak?stop=1
+     */
+    private fun handleSpeak(session: IHTTPSession): Response {
+        // Stop command
+        val stopParam = session.parameters["stop"]?.firstOrNull()
+        if (stopParam == "1") {
+            tts.stop()
+            return newFixedLengthResponse("OK stopped")
+        }
+
+        // Get text to speak
+        val text = session.parameters["text"]?.firstOrNull()
+        if (text.isNullOrBlank()) {
+            return newFixedLengthResponse(
+                Response.Status.BAD_REQUEST,
+                "text/plain",
+                "Missing text. Example: /speak?text=Moi!&lang=fi-FI"
+            )
+        }
+
+        // Language (default Finnish)
+        val lang = session.parameters["lang"]?.firstOrNull() ?: "fi-FI"
+
+        // Queue mode (0 = interrupt, 1 = add to queue)
+        val queue = session.parameters["queue"]?.firstOrNull() == "1"
+
+        // Speak
+        val success = tts.speak(text, lang, queue)
+
+        return if (success) {
+            newFixedLengthResponse("OK speaking: $text")
+        } else {
+            newFixedLengthResponse(
+                Response.Status.SERVICE_UNAVAILABLE,
+                "text/plain",
+                "TTS not ready or failed"
+            )
+        }
     }
 }
