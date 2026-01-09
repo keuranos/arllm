@@ -10,16 +10,18 @@ import requests
 import numpy as np
 import cv2
 
+from config import Config
+
 # Person detector (YOLO)
 from ultralytics import YOLO
 
 
 # ---------------- CONFIG ----------------
-OLLAMA_BASE = "http://192.168.86.250:11434"
-MODEL = "devstral-small-2:latest"           # LLM (planner)
-GATEWAY_BASE = "http://192.168.86.35:8765"
+OLLAMA_BASE = Config.OLLAMA_BASE
+MODEL = Config.MODEL           # LLM (planner)
+GATEWAY_BASE = Config.GATEWAY_BASE
 
-TIMEOUT = 30
+TIMEOUT = Config.TIMEOUT
 SESSION = requests.Session()
 
 STREAM_URL = f"{GATEWAY_BASE}/stream.mjpeg"
@@ -27,9 +29,9 @@ FRAME_READ_TIMEOUT = 8.0
 SENSORS_URL = f"{GATEWAY_BASE}/sensors.json"
 
 # Safety limits
-MAX_SPEED = 170
-MAX_MS = 1200
-MAX_STEPS = 80
+MAX_SPEED = Config.MAX_SPEED
+MAX_MS = Config.MAX_MS
+MAX_STEPS = Config.MAX_STEPS
 STEP_DELAY = 0.12
 MAX_ACTIONS_PER_STEP = 6
 
@@ -39,11 +41,11 @@ TURN_SPEED, TURN_MS = 150, 420
 APPROACH_L, APPROACH_R, APPROACH_MS = 120, 120, 450
 
 # Vision tuning
-PERSON_CONF_MIN = 0.35
+PERSON_CONF_MIN = Config.PERSON_CONF_MIN
 
 # "Door/opening" heuristic tuning
-OPENING_MIN_SCORE = 0.55      # if above -> we believe there's an opening
-OPENING_APPROACH_SCORE = 0.70 # if above -> approach more confidently
+OPENING_MIN_SCORE = Config.OPENING_MIN_SCORE      # if above -> we believe there's an opening
+OPENING_APPROACH_SCORE = Config.OPENING_APPROACH_SCORE # if above -> approach more confidently
 
 
 # ---------------- SYSTEM PROMPT ----------------
