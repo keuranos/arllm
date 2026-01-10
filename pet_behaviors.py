@@ -15,7 +15,7 @@ import random
 import time
 import math
 from dataclasses import dataclass, field
-from typing import Dict, List, Any, Optional, Tuple, Callable
+from typing import Dict, List, Any, Optional, Tuple, Callable, Union
 from enum import Enum
 import requests
 
@@ -41,6 +41,7 @@ class ARCoreClient:
         self.arcore_url = f"{gateway_base}/arcore.json"
         self.session = requests.Session()
         self.last_pose: Optional[Pose] = None
+        self.last_rotation: Optional[List[float]] = None  # [qx, qy, qz, qw] for SLAM
         self.tracking_state: str = "UNKNOWN"
 
     def fetch_pose(self, timeout: float = 5.0) -> Optional[Pose]:
@@ -55,18 +56,26 @@ class ARCoreClient:
             if self.tracking_state != "TRACKING":
                 return self.last_pose  # Return last known pose
 
-            # Extract position and rotation
-            pos = data.get("position", {})
-            rot = data.get("rotation", {})
+            # Extract position and rotation (handles both list and dict formats)
+            pos = data.get("position", [0, 0, 0])
+            rot = data.get("rotation", [0, 0, 0, 1])
+
+            # Handle list format (from ArCoreTracker.kt)
+            if isinstance(pos, list):
+                x, y, z = pos[0] if len(pos) > 0 else 0, pos[1] if len(pos) > 1 else 0, pos[2] if len(pos) > 2 else 0
+            else:
+                x, y, z = pos.get("x", 0), pos.get("y", 0), pos.get("z", 0)
+
+            if isinstance(rot, list):
+                qx, qy, qz, qw = rot[0] if len(rot) > 0 else 0, rot[1] if len(rot) > 1 else 0, rot[2] if len(rot) > 2 else 0, rot[3] if len(rot) > 3 else 1
+                self.last_rotation = rot  # Store as list for SLAM
+            else:
+                qx, qy, qz, qw = rot.get("x", 0), rot.get("y", 0), rot.get("z", 0), rot.get("w", 1)
+                self.last_rotation = [qx, qy, qz, qw]
 
             pose = Pose(
-                x=pos.get("x", 0),
-                y=pos.get("y", 0),
-                z=pos.get("z", 0),
-                qx=rot.get("x", 0),
-                qy=rot.get("y", 0),
-                qz=rot.get("z", 0),
-                qw=rot.get("w", 1),
+                x=x, y=y, z=z,
+                qx=qx, qy=qy, qz=qz, qw=qw,
                 timestamp=time.time(),
             )
 

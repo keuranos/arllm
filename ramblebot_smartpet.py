@@ -48,6 +48,7 @@ from depth_estimator import estimate_depth, depth_to_telemetry
 from semantic_memory import SemanticMemory, Pose, LandmarkType, get_memory
 from pet_behaviors import PetBehaviors, ARCoreClient, Mood
 from robot_speech import RobotSpeaker, RobotPersonality, CommentaryType
+from slam import get_slam, SLAMMapper
 
 
 # ========================
@@ -654,6 +655,9 @@ class SmartPetAgent:
         self.history: List[str] = []
         self.prev_fp: Optional[str] = None
 
+        # Initialize SLAM mapper
+        self.slam = get_slam("slam_map.json")
+
         # Initialize speech system
         if USE_SPEECH:
             personality = RobotPersonality(
@@ -669,6 +673,7 @@ class SmartPetAgent:
 
         print("Smart Pet Agent initialized.")
         print(f"- Memory: {len(self.memory.landmarks)} landmarks, {len(self.memory.episodes)} episodes")
+        print(f"- SLAM: {self.slam.get_stats()['explored_percent']}% explored")
         print(f"- Mode: {self.state.operating_mode.value}")
         print(f"- Speech: {'Enabled (Finnish)' if USE_SPEECH else 'Disabled'}")
 
@@ -704,6 +709,29 @@ class SmartPetAgent:
             pose_data["y"] = round(pose.y, 3)
             pose_data["z"] = round(pose.z, 3)
 
+        # Update SLAM with ARCore pose and depth
+        slam_data = {"available": False}
+        if self.arcore.tracking_state == "TRACKING":
+            arcore_raw = {
+                "trackingState": "TRACKING",
+                "position": [pose.x, pose.y, pose.z] if pose else [0, 0, 0],
+                "rotation": self.arcore.last_rotation or [0, 0, 0, 1],
+            }
+            self.slam.update_pose(arcore_raw)
+
+            # Update occupancy grid with depth data
+            if depth_data.get("available"):
+                self.slam.update_map(depth_data)
+
+            # Get SLAM stats for telemetry
+            stats = self.slam.get_stats()
+            slam_data = {
+                "available": True,
+                "explored_percent": stats["explored_percent"],
+                "free_cells": stats["free_cells"],
+                "occupied_cells": stats["occupied_cells"],
+            }
+
         # Phone sensors
         sensors_raw = fetch_sensors()
         sensors = summarize_sensors(sensors_raw)
@@ -715,6 +743,7 @@ class SmartPetAgent:
             "opening": opening if opening.get("score", 0) > 0.1 else {"score": 0},
             "depth": depth_data,
             "pose": pose_data,
+            "slam": slam_data,
             "sensors": sensors,
             "stall_count": self.state.stall_count,
         }
@@ -919,6 +948,7 @@ class SmartPetAgent:
     def show_status(self):
         """Display current status."""
         pet_state = self.pet.get_state_summary()
+        slam_stats = self.slam.get_stats()
         print("\n--- Smart Pet Status ---")
         print(f"Mode: {self.state.operating_mode.value}")
         print(f"Mood: {pet_state['mood']}")
@@ -927,6 +957,7 @@ class SmartPetAgent:
         print(f"Social need: {pet_state['social_need']:.2f}")
         print(f"Cells explored: {pet_state['cells_explored']}")
         print(f"ARCore tracking: {pet_state['tracking_state']}")
+        print(f"SLAM explored: {slam_stats['explored_percent']}%")
         print(f"Known rooms: {len(self.memory.find_landmarks_by_type(LandmarkType.ROOM))}")
         print(f"Total landmarks: {len(self.memory.landmarks)}")
         print(f"Episodes recorded: {len(self.memory.episodes)}")
@@ -939,6 +970,32 @@ class SmartPetAgent:
             print("No rooms known yet. Explore to discover rooms!")
         for r in rooms:
             print(f"  {r.name}: ({r.pose.x:.2f}, {r.pose.y:.2f}, {r.pose.z:.2f}) - visited {r.times_visited}x")
+
+    def show_slam(self):
+        """Display SLAM statistics."""
+        stats = self.slam.get_stats()
+        print("\n--- SLAM Statistics ---")
+        print(f"Grid size: {stats['grid_size']} ({stats['resolution']} per cell)")
+        print(f"Explored: {stats['explored_percent']}%")
+        print(f"Free cells: {stats['free_cells']}")
+        print(f"Occupied cells: {stats['occupied_cells']}")
+        print(f"Pose history: {stats['pose_history_length']} points")
+        pose = stats['current_pose']
+        print(f"Current pose: X={pose['x']:.2f}, Y={pose['y']:.2f}, θ={pose['theta']}°")
+
+    def save_slam_map(self, filename: str = "slam_map_image.png"):
+        """Save SLAM map as an image."""
+        try:
+            img = self.slam.get_map_image(scale=3)
+            import cv2
+            cv2.imwrite(filename, img)
+            print(f"SLAM map saved to: {filename}")
+        except Exception as e:
+            print(f"Failed to save map image: {e}")
+
+        # Also save the raw map data
+        self.slam.save()
+        print("SLAM data saved to: slam_map.json")
 
 
 # ========================
@@ -961,6 +1018,8 @@ def main():
     print("  /status   - Show pet status")
     print("  /rooms    - List known rooms")
     print("  /memory   - Query memory")
+    print("  /slam     - Show SLAM stats")
+    print("  /savemap  - Save SLAM map image")
     print("  /explore  - Start exploration")
     print("  /q, exit  - Quit")
     print()
@@ -992,6 +1051,14 @@ def main():
 
             if cmd == "/rooms":
                 agent.show_rooms()
+                continue
+
+            if cmd == "/slam":
+                agent.show_slam()
+                continue
+
+            if cmd == "/savemap":
+                agent.save_slam_map()
                 continue
 
             if cmd == "/explore":
