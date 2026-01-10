@@ -69,10 +69,11 @@ class TTSController(context: Context) : TextToSpeech.OnInitListener {
             })
 
             // Set speech rate (slightly faster than default)
-            tts?.setSpeechRate(1.1f)
+            tts?.setSpeechRate(1.0f)
 
-            // Set pitch
-            tts?.setPitch(1.0f)
+            // Set pitch for male voice (lower pitch = more masculine)
+            // 0.7-0.85 = male, 1.0 = neutral, 1.1-1.3 = female
+            tts?.setPitch(0.8f)
 
             isInitialized = true
             Log.i(tag, "TTS initialized with locale: $currentLocale")
@@ -154,6 +155,15 @@ class TTSController(context: Context) : TextToSpeech.OnInitListener {
      */
     fun setSpeechRate(rate: Float) {
         tts?.setSpeechRate(rate.coerceIn(0.5f, 2.0f))
+    }
+
+    /**
+     * Set voice pitch.
+     *
+     * @param pitch 0.5 (very low/male) to 2.0 (high/female), 1.0 is neutral
+     */
+    fun setPitch(pitch: Float) {
+        tts?.setPitch(pitch.coerceIn(0.5f, 2.0f))
     }
 
     /**

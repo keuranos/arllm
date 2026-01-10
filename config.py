@@ -56,12 +56,12 @@ class Config:
     # ========================
 
     # Android Phone Gateway (camera, sensors, robot control, TTS)
-    GATEWAY_IP = _get_env("GATEWAY_IP", "192.168.86.35")
+    GATEWAY_IP = _get_env("GATEWAY_IP", "192.168.101.102")
     GATEWAY_PORT = int(_get_env("GATEWAY_PORT", "8765"))
     GATEWAY_BASE = f"http://{GATEWAY_IP}:{GATEWAY_PORT}"
 
     # Ollama LLM Server
-    OLLAMA_IP = _get_env("OLLAMA_IP", "192.168.86.250")
+    OLLAMA_IP = _get_env("OLLAMA_IP", "192.168.101.100")
     OLLAMA_PORT = int(_get_env("OLLAMA_PORT", "11434"))
     OLLAMA_BASE = f"http://{OLLAMA_IP}:{OLLAMA_PORT}"
 
@@ -87,6 +87,19 @@ class Config:
 
     # How often robot comments (0-1)
     SPEECH_CHATTINESS = _get_env_float("SPEECH_RATE", 0.6)
+
+    # ========================
+    # Robot Personality
+    # ========================
+
+    # Personality type: "pet", "doctor", "assistant", "explorer"
+    PERSONALITY = _get_env("PERSONALITY", "doctor")
+
+    # Robot name
+    ROBOT_NAME = _get_env("ROBOT_NAME", "Tohtori Ramble")
+
+    # Voice: "male" or "female"
+    VOICE_GENDER = _get_env("VOICE_GENDER", "male")
 
     # ========================
     # Robot Safety Limits
