@@ -48,6 +48,7 @@ object WebUi {
           <button id="rot180">180°</button>
           <button id="rot270">270°</button>
           <button id="mirror">Mirror</button>
+          <button id="flash" title="Toggle flashlight">🔦</button>
           <span class="mono" id="camState"></span>
         </div>
       </div>
@@ -208,6 +209,17 @@ document.getElementById('rot180').onclick = ()=>{ rot=180; applyCamTransform(); 
 document.getElementById('rot270').onclick = ()=>{ rot=270; applyCamTransform(); };
 document.getElementById('mirror').onclick = ()=>{ mir=!mir; applyCamTransform(); };
 applyCamTransform();
+
+// Flashlight toggle
+const flashBtn = document.getElementById('flash');
+let flashOn = false;
+flashBtn.onclick = ()=>{
+  fetch('/flash?toggle=1').then(r => r.text()).then(t => {
+    flashOn = t.includes('ON');
+    flashBtn.style.background = flashOn ? '#ffc107' : '';
+    flashBtn.title = flashOn ? 'Flashlight ON' : 'Flashlight OFF';
+  }).catch(()=>{});
+};
 
 // Head controls
 const headPos = document.getElementById('headPos');

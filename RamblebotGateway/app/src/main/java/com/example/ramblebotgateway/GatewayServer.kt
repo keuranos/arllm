@@ -72,6 +72,15 @@ class GatewayServer(
                     resp
                 }
 
+                uri.startsWith("/flash") -> handleFlashlight(session)
+
+                uri == "/flash.json" -> {
+                    val json = """{"on":${arCore.isFlashlightOn()}}"""
+                    val resp = newFixedLengthResponse(Response.Status.OK, "application/json", json)
+                    resp.addHeader("Cache-Control", "no-cache")
+                    resp
+                }
+
                 else -> newFixedLengthResponse(Response.Status.NOT_FOUND, "text/plain", "Not found")
             }
         } catch (e: Exception) {
@@ -200,6 +209,38 @@ class GatewayServer(
                 Response.Status.SERVICE_UNAVAILABLE,
                 "text/plain",
                 "TTS not ready or failed"
+            )
+        }
+    }
+
+    /**
+     * Handle flashlight control.
+     * /flash?on=1  - turn on
+     * /flash?on=0  - turn off
+     * /flash?toggle=1 - toggle
+     */
+    private fun handleFlashlight(session: IHTTPSession): Response {
+        val toggleParam = session.parameters["toggle"]?.firstOrNull()
+        val onParam = session.parameters["on"]?.firstOrNull()
+
+        val result = when {
+            toggleParam == "1" -> arCore.toggleFlashlight()
+            onParam == "1" -> arCore.setFlashlight(true)
+            onParam == "0" -> arCore.setFlashlight(false)
+            else -> {
+                // No param = toggle
+                arCore.toggleFlashlight()
+            }
+        }
+
+        return if (result) {
+            val state = if (arCore.isFlashlightOn()) "ON" else "OFF"
+            newFixedLengthResponse("OK flash $state")
+        } else {
+            newFixedLengthResponse(
+                Response.Status.SERVICE_UNAVAILABLE,
+                "text/plain",
+                "Flash not available or failed"
             )
         }
     }

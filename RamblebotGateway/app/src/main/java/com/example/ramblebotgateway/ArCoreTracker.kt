@@ -4,6 +4,8 @@ import android.content.Context
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.graphics.YuvImage
+import android.hardware.camera2.CameraAccessException
+import android.hardware.camera2.CameraManager
 import android.media.Image
 import android.os.Build
 import android.util.Log
@@ -29,6 +31,54 @@ class ArCoreTracker(private val context: Context) {
 
     @Volatile
     private var latestPose: ArCorePose? = null
+
+    // Flashlight control
+    private val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
+    private var flashlightOn = false
+    private var flashCameraId: String? = null
+
+    init {
+        // Find camera with flash
+        try {
+            for (id in cameraManager.cameraIdList) {
+                val chars = cameraManager.getCameraCharacteristics(id)
+                val hasFlash = chars.get(android.hardware.camera2.CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
+                if (hasFlash) {
+                    flashCameraId = id
+                    break
+                }
+            }
+            Log.i("ArCoreTracker", "Flash camera ID: $flashCameraId")
+        } catch (e: Exception) {
+            Log.w("ArCoreTracker", "Failed to find flash camera: ${e.message}")
+        }
+    }
+
+    fun setFlashlight(on: Boolean): Boolean {
+        if (flashCameraId == null) {
+            Log.w("ArCoreTracker", "No flash available")
+            return false
+        }
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                cameraManager.setTorchMode(flashCameraId!!, on)
+                flashlightOn = on
+                Log.i("ArCoreTracker", "Flashlight: ${if (on) "ON" else "OFF"}")
+                true
+            } else {
+                false
+            }
+        } catch (e: CameraAccessException) {
+            Log.w("ArCoreTracker", "Failed to set flashlight: ${e.message}")
+            false
+        }
+    }
+
+    fun isFlashlightOn(): Boolean = flashlightOn
+
+    fun toggleFlashlight(): Boolean {
+        return setFlashlight(!flashlightOn)
+    }
 
     fun start(): Boolean {
         if (running.get()) return true
