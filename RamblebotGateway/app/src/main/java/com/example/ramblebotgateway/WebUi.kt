@@ -7,128 +7,128 @@ object WebUi {
 <head>
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Ramblebot Console</title>
+  <title>Ramblebot</title>
   <style>
-    body { font-family: sans-serif; margin: 12px; background: #f5f5f5; }
-    .grid { display: grid; grid-template-columns: 1fr; gap: 12px; max-width: 1200px; }
-    @media (min-width: 900px) { .grid { grid-template-columns: 1fr 1fr; } }
-    .card { border: 1px solid #ddd; border-radius: 10px; padding: 12px; background: white; }
-    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    button { padding: 10px 14px; font-size: 14px; cursor: pointer; border-radius: 6px; border: 1px solid #ccc; }
-    button:hover { background: #e8e8e8; }
-    input[type=range] { width: 100%; }
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-    #camWrap { display: inline-block; width: 100%; overflow: hidden; border-radius: 8px; border: 1px solid #ccc; }
-    #cam { width: 100%; display:block; transform-origin: center center; }
-    .hint { color:#666; font-size: 12px; }
-    .small { font-size: 13px; }
-    #mapCanvas { border: 1px solid #333; border-radius: 8px; background: #1a1a2e; }
-    .pose-info { font-size: 13px; color: #333; }
-    .tracking { color: #2e7d32; font-weight: bold; }
-    .not-tracking { color: #c62828; font-weight: bold; }
+    * { box-sizing: border-box; }
+    body { font-family: -apple-system, sans-serif; margin: 0; padding: 8px; background: #f0f0f0; font-size: 14px; }
+    .header { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; background: #333; color: white; border-radius: 8px; margin-bottom: 8px; }
+    .header h1 { margin: 0; font-size: 18px; }
+    .status-bar { display: flex; gap: 12px; font-size: 13px; }
+    .status-item { display: flex; align-items: center; gap: 4px; }
+    .battery { padding: 2px 8px; border-radius: 4px; font-weight: bold; }
+    .battery.high { background: #4caf50; }
+    .battery.mid { background: #ff9800; }
+    .battery.low { background: #f44336; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+    .card { border: 1px solid #ccc; border-radius: 8px; padding: 8px; background: white; }
+    .card-title { font-weight: bold; font-size: 13px; margin-bottom: 6px; display: flex; justify-content: space-between; align-items: center; }
+    .row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+    button { padding: 8px 12px; font-size: 13px; cursor: pointer; border-radius: 4px; border: 1px solid #aaa; background: #f8f8f8; }
+    button:hover { background: #e0e0e0; }
+    button:active { background: #d0d0d0; }
+    .btn-sm { padding: 4px 8px; font-size: 12px; }
+    input[type=range] { width: 100%; margin: 4px 0; }
+    .mono { font-family: ui-monospace, monospace; font-size: 11px; }
+    #camWrap { width: 100%; overflow: hidden; border-radius: 6px; border: 1px solid #999; background: #000; }
+    #cam { width: 100%; display: block; transform-origin: center; }
+    #mapCanvas { border: 1px solid #444; border-radius: 6px; background: #1a1a2e; width: 100%; max-width: 300px; }
+    .collapsible { cursor: pointer; }
+    .collapsible:after { content: ' ▼'; font-size: 10px; }
+    .collapsed:after { content: ' ►'; }
+    .collapse-content { max-height: 100px; overflow: auto; transition: max-height 0.2s; }
+    .collapse-content.hidden { max-height: 0; overflow: hidden; }
+    .tracking { color: #2e7d32; }
+    .not-tracking { color: #c62828; }
+    .hint { color: #666; font-size: 11px; }
+    .flex-col { display: flex; flex-direction: column; gap: 8px; }
   </style>
 </head>
 <body>
-  <h2 style="margin-top:0;">🤖 Ramblebot Console</h2>
-  <div class="grid">
+  <!-- Header with battery and status -->
+  <div class="header">
+    <h1>🤖 Ramblebot</h1>
+    <div class="status-bar">
+      <div class="status-item">🔋 <span id="batteryPct" class="battery high">--</span></div>
+      <div class="status-item">📍 <span id="arStatus" class="not-tracking">--</span></div>
+      <div class="status-item"><button id="kb" class="btn-sm">⌨️</button></div>
+    </div>
+  </div>
 
-    <!-- Video Feed -->
-    <div class="card">
-      <div class="row" style="justify-content:space-between;">
-        <div><b>📹 Video</b></div>
-        <button id="kb">Capture keyboard</button>
-      </div>
-      <div id="camWrap" style="margin-top:8px;">
-        <img id="cam" src="/stream.mjpeg" alt="mjpeg stream"/>
-      </div>
-      <div style="margin-top:8px;">
-        <div class="row">
-          <button id="rot0">0°</button>
-          <button id="rot90">90°</button>
-          <button id="rot180">180°</button>
-          <button id="rot270">270°</button>
-          <button id="mirror">Mirror</button>
-          <button id="flash" title="Toggle flashlight">🔦</button>
+  <div class="grid">
+    <!-- Left Column: Video + Controls -->
+    <div class="flex-col">
+      <!-- Video -->
+      <div class="card">
+        <div id="camWrap"><img id="cam" src="/stream.mjpeg" alt="stream"/></div>
+        <div class="row" style="margin-top:6px;">
+          <button class="btn-sm" id="rot0">0°</button>
+          <button class="btn-sm" id="rot90">90°</button>
+          <button class="btn-sm" id="rot180">180°</button>
+          <button class="btn-sm" id="rot270">270°</button>
+          <button class="btn-sm" id="mirror">⟷</button>
+          <button class="btn-sm" id="flash">🔦</button>
           <span class="mono" id="camState"></span>
         </div>
       </div>
-    </div>
 
-    <!-- ARCore Map -->
-    <div class="card">
-      <div class="row" style="justify-content:space-between;">
-        <div><b>🗺️ ARCore Map</b></div>
+      <!-- Drive -->
+      <div class="card">
+        <div class="card-title">🎮 Drive <span class="hint">WASD+Space</span></div>
         <div class="row">
-          <button id="clearMap">Clear</button>
-          <label class="small"><input id="mapAuto" type="checkbox" checked/> Live</label>
+          <button id="fwd">↑W</button>
+          <button id="left">←A</button>
+          <button id="stop" style="background:#fcc;">■</button>
+          <button id="right">D→</button>
+          <button id="back">↓S</button>
         </div>
-      </div>
-      <canvas id="mapCanvas" width="400" height="400" style="margin-top:8px; width:100%; max-width:400px;"></canvas>
-      <div class="pose-info" style="margin-top:8px;">
-        <div>Status: <span id="trackStatus" class="not-tracking">-</span></div>
-        <div>Position: <span id="posXYZ" class="mono">-</span></div>
-        <div>Rotation: <span id="rotQ" class="mono">-</span></div>
-        <div>Points: <span id="pointCount" class="mono">0</span></div>
-      </div>
-    </div>
-
-    <!-- Drive Controls -->
-    <div class="card">
-      <div><b>🎮 Drive</b> <span class="hint">(WASD + Space)</span></div>
-      <div class="row" style="margin-top:8px;">
-        <button id="fwd">↑ W</button>
-        <button id="left">← A</button>
-        <button id="stop">STOP</button>
-        <button id="right">→ D</button>
-        <button id="back">↓ S</button>
-      </div>
-      <div style="margin-top:10px;">
-        <div>Left: <span id="lv">0</span></div>
-        <input id="l" type="range" min="-255" max="255" value="0"/>
-        <div>Right: <span id="rv">0</span></div>
-        <input id="r" type="range" min="-255" max="255" value="0"/>
-        <div class="row" style="margin-top:8px;">
-          <button id="apply">Apply</button>
-          <button id="center">Center</button>
+        <div style="margin-top:6px;">
+          <span class="mono">L:<span id="lv">0</span></span>
+          <input id="l" type="range" min="-255" max="255" value="0"/>
+          <span class="mono">R:<span id="rv">0</span></span>
+          <input id="r" type="range" min="-255" max="255" value="0"/>
+          <div class="row"><button class="btn-sm" id="apply">Apply</button><button class="btn-sm" id="center">Center</button></div>
         </div>
-        <div class="hint mono" id="last" style="margin-top:6px;"></div>
+        <div class="mono hint" id="last"></div>
       </div>
-    </div>
 
-    <!-- Head Controls -->
-    <div class="card">
-      <div><b>📐 Head Tilt</b></div>
-      <div style="margin-top:8px;">
-        <div>Position: <span id="hp">90</span>°</div>
-        <input id="headPos" type="range" min="0" max="180" value="90"/>
-        <div style="margin-top:8px;">Speed: <span id="hs">0</span></div>
-        <input id="headSpeed" type="range" min="0" max="9" value="0"/>
-        <div class="row" style="margin-top:8px;">
-          <button id="headUp">Up</button>
-          <button id="headDown">Down</button>
-          <button id="headSend">Set</button>
+      <!-- Head -->
+      <div class="card">
+        <div class="card-title">📐 Head</div>
+        <div class="row">
+          <button class="btn-sm" id="headUp">↑</button>
+          <span class="mono">Pos:<span id="hp">90</span>°</span>
+          <button class="btn-sm" id="headDown">↓</button>
+          <input id="headPos" type="range" min="0" max="180" value="90" style="flex:1;"/>
         </div>
       </div>
     </div>
 
-    <!-- Sensors -->
-    <div class="card">
-      <div class="row" style="justify-content:space-between;">
-        <div><b>📊 Sensors</b></div>
-        <label class="small"><input id="sensorAuto" type="checkbox"/> Auto</label>
+    <!-- Right Column: Map + Data -->
+    <div class="flex-col">
+      <!-- ARCore Map -->
+      <div class="card">
+        <div class="card-title">🗺️ Map <div class="row"><button class="btn-sm" id="clearMap">Clear</button><label class="hint"><input id="mapAuto" type="checkbox" checked/> Live</label></div></div>
+        <canvas id="mapCanvas" width="300" height="300"></canvas>
+        <div class="mono" style="margin-top:4px;">
+          <span id="trackStatus" class="not-tracking">-</span> |
+          Pos: <span id="posXYZ">-</span> |
+          Pts: <span id="pointCount">0</span>
+        </div>
       </div>
-      <pre id="sensorOut" class="mono" style="white-space:pre-wrap; max-height:150px; overflow:auto; margin-top:8px;"></pre>
-    </div>
 
-    <!-- ARCore Raw -->
-    <div class="card">
-      <div class="row" style="justify-content:space-between;">
-        <div><b>📍 ARCore Raw</b></div>
-        <label class="small"><input id="arAuto" type="checkbox" checked/> Auto</label>
+      <!-- ARCore Raw (collapsible) -->
+      <div class="card">
+        <div class="card-title collapsible" id="arToggle">📍 ARCore <label class="hint"><input id="arAuto" type="checkbox" checked/> Auto</label></div>
+        <pre id="arOut" class="mono collapse-content" style="margin:0;"></pre>
       </div>
-      <pre id="arOut" class="mono" style="white-space:pre-wrap; max-height:150px; overflow:auto; margin-top:8px;"></pre>
-    </div>
 
+      <!-- Sensors (collapsible) -->
+      <div class="card">
+        <div class="card-title collapsible" id="sensorToggle">📊 Sensors <label class="hint"><input id="sensorAuto" type="checkbox"/> Auto</label></div>
+        <pre id="sensorOut" class="mono collapse-content hidden" style="margin:0;"></pre>
+      </div>
+    </div>
   </div>
 
 <script>
@@ -223,17 +223,40 @@ flashBtn.onclick = ()=>{
 
 // Head controls
 const headPos = document.getElementById('headPos');
-const headSpeed = document.getElementById('headSpeed');
 const hp = document.getElementById('hp');
-const hs = document.getElementById('hs');
-function updateHeadLabels(){ hp.textContent = headPos.value; hs.textContent = headSpeed.value; }
-headPos.oninput = updateHeadLabels;
-headSpeed.oninput = updateHeadLabels;
-updateHeadLabels();
-function sendHead(){ api("/cmd?do=head&pos=" + headPos.value + "&speed=" + headSpeed.value); }
-document.getElementById('headSend').onclick = sendHead;
-document.getElementById('headUp').onclick = ()=>{ headPos.value = Math.min(180, +headPos.value + 10); updateHeadLabels(); sendHead(); };
-document.getElementById('headDown').onclick = ()=>{ headPos.value = Math.max(0, +headPos.value - 10); updateHeadLabels(); sendHead(); };
+function updateHeadLabel(){ hp.textContent = headPos.value; }
+headPos.oninput = ()=>{ updateHeadLabel(); sendHead(); };
+updateHeadLabel();
+function sendHead(){ api("/cmd?do=head&pos=" + headPos.value + "&speed=0"); }
+document.getElementById('headUp').onclick = ()=>{ headPos.value = Math.min(180, +headPos.value + 15); updateHeadLabel(); sendHead(); };
+document.getElementById('headDown').onclick = ()=>{ headPos.value = Math.max(0, +headPos.value - 15); updateHeadLabel(); sendHead(); };
+
+// Battery status
+const batteryPct = document.getElementById('batteryPct');
+const arStatus = document.getElementById('arStatus');
+async function loadBattery(){
+  try {
+    const resp = await fetch('/battery.json', {cache: 'no-store'});
+    const data = await resp.json();
+    const pct = data.percent;
+    batteryPct.textContent = pct + '%' + (data.charging ? '⚡' : '');
+    batteryPct.className = 'battery ' + (pct > 50 ? 'high' : pct > 20 ? 'mid' : 'low');
+  } catch(e) { batteryPct.textContent = '--'; }
+}
+loadBattery();
+setInterval(loadBattery, 10000);
+
+// Collapsible sections
+document.getElementById('arToggle').onclick = (e)=>{
+  if(e.target.tagName === 'INPUT') return;
+  document.getElementById('arOut').classList.toggle('hidden');
+  e.currentTarget.classList.toggle('collapsed');
+};
+document.getElementById('sensorToggle').onclick = (e)=>{
+  if(e.target.tagName === 'INPUT') return;
+  document.getElementById('sensorOut').classList.toggle('hidden');
+  e.currentTarget.classList.toggle('collapsed');
+};
 
 // Sensor feed
 const sensorOut = document.getElementById('sensorOut');
@@ -260,7 +283,6 @@ const arOut = document.getElementById('arOut');
 const arAuto = document.getElementById('arAuto');
 const trackStatus = document.getElementById('trackStatus');
 const posXYZ = document.getElementById('posXYZ');
-const rotQ = document.getElementById('rotQ');
 const pointCount = document.getElementById('pointCount');
 
 // Trail history
@@ -394,14 +416,13 @@ async function loadAr(){
     const tracking = data.trackingState === 'TRACKING';
     trackStatus.textContent = data.trackingState || 'N/A';
     trackStatus.className = tracking ? 'tracking' : 'not-tracking';
+    arStatus.textContent = tracking ? '✓ Tracking' : data.trackingState || '--';
+    arStatus.className = tracking ? 'tracking' : 'not-tracking';
 
     if(data.position){
-      posXYZ.textContent = 'X:' + data.position[0].toFixed(2) +
-                          ' Y:' + data.position[1].toFixed(2) +
-                          ' Z:' + data.position[2].toFixed(2);
-    }
-    if(data.rotation){
-      rotQ.textContent = data.rotation.map(v => v.toFixed(2)).join(', ');
+      posXYZ.textContent = data.position[0].toFixed(2) + ',' +
+                          data.position[1].toFixed(2) + ',' +
+                          data.position[2].toFixed(2);
     }
     pointCount.textContent = trail.length;
 

@@ -228,36 +228,42 @@ def safe_json_loads(text: str) -> Dict[str, Any]:
 # MJPEG & Sensors
 # ========================
 
-def get_mjpeg_frame(url: str) -> bytes:
-    r = SESSION.get(url, stream=True, timeout=FRAME_READ_TIMEOUT)
-    r.raise_for_status()
+def get_mjpeg_frame(url: str, timeout: float = FRAME_READ_TIMEOUT) -> Optional[bytes]:
+    """Get a frame from MJPEG stream. Returns None on timeout or error."""
+    try:
+        r = SESSION.get(url, stream=True, timeout=timeout)
+        r.raise_for_status()
 
-    buf = bytearray()
-    soi = b"\xff\xd8"
-    eoi = b"\xff\xd9"
-    start = None
-    t0 = time.time()
+        buf = bytearray()
+        soi = b"\xff\xd8"
+        eoi = b"\xff\xd9"
+        start = None
+        t0 = time.time()
 
-    for chunk in r.iter_content(chunk_size=4096):
-        if not chunk:
-            continue
-        buf.extend(chunk)
+        for chunk in r.iter_content(chunk_size=4096):
+            if not chunk:
+                continue
+            buf.extend(chunk)
 
-        if start is None:
-            idx = buf.find(soi)
-            if idx != -1:
-                start = idx
+            if start is None:
+                idx = buf.find(soi)
+                if idx != -1:
+                    start = idx
 
-        if start is not None:
-            idx2 = buf.find(eoi, start + 2)
-            if idx2 != -1:
-                frame = bytes(buf[start:idx2 + 2])
+            if start is not None:
+                idx2 = buf.find(eoi, start + 2)
+                if idx2 != -1:
+                    frame = bytes(buf[start:idx2 + 2])
+                    r.close()
+                    return frame
+
+            if time.time() - t0 > timeout:
                 r.close()
-                return frame
+                return None
 
-        if time.time() - t0 > FRAME_READ_TIMEOUT:
-            r.close()
-            raise TimeoutError("Timed out reading MJPEG frame")
+        return None
+    except Exception:
+        return None
 
 
 def fetch_sensors() -> Optional[Dict[str, Any]]:
@@ -753,8 +759,27 @@ class SmartPetAgent:
         self.state.steps_taken += 1
         self.state.mode = Mode.OBSERVE
 
-        # Get frame
-        jpeg = get_mjpeg_frame(STREAM_URL)
+        # Get frame (may be None if camera/ARCore not ready)
+        jpeg = get_mjpeg_frame(STREAM_URL, timeout=3.0)
+        if jpeg is None:
+            # No video available - use pose-only mode
+            print(f"[step {self.state.steps_taken}] No video frame (ARCore not tracking?)")
+            # Still update ARCore pose
+            self.arcore.fetch_pose()
+            # Use pet behaviors as fallback without vision
+            pet_action = self.pet.get_behavior({
+                "persons": [],
+                "opening": {"score": 0},
+                "depth": {"available": False},
+                "pose": {"available": self.arcore.tracking_state == "TRACKING"},
+            })
+            if pet_action:
+                actions = normalize_actions(pet_action)
+                actions = validate_actions(actions, self.safety)
+                return execute(actions, self.safety, self.history, self.memory, self.arcore)
+            time.sleep(0.5)  # Wait before retrying
+            return False, None
+
         img = decode_jpeg(jpeg)
 
         # Gather telemetry

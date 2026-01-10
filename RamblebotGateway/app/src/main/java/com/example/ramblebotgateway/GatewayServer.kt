@@ -48,6 +48,13 @@ class GatewayServer(
                     resp
                 }
 
+                uri == "/battery.json" -> {
+                    val json = sensors.batteryJson()
+                    val resp = newFixedLengthResponse(Response.Status.OK, "application/json", json)
+                    resp.addHeader("Cache-Control", "no-cache")
+                    resp
+                }
+
                 uri == "/arcore.json" -> {
                     val pose = arCore.latest()
                     val payload = if (pose == null) {

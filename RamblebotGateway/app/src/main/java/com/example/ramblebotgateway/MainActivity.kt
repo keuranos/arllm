@@ -41,6 +41,9 @@ class MainActivity : ComponentActivity() {
     private val useArCore = true
     private var arCoreEnabled = false
 
+    // Default Ramblebot MAC address
+    private val DEFAULT_MAC = "98:D3:31:20:4C:24"
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -48,6 +51,9 @@ class MainActivity : ComponentActivity() {
         status = findViewById(R.id.statusText)
         macEdit = findViewById(R.id.macEdit)
         connectBtn = findViewById(R.id.connectBtn)
+
+        // Set default MAC address
+        macEdit.setText(DEFAULT_MAC)
 
         sensors = SensorHub(this).also { it.start() }
         arCore = ArCoreTracker(this)

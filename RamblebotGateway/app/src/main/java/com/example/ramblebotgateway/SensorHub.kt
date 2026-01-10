@@ -1,10 +1,13 @@
 package com.example.ramblebotgateway
 
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
+import android.os.BatteryManager
 import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 
@@ -15,11 +18,52 @@ data class SensorSample(
     val updatedAtMs: Long
 )
 
-class SensorHub(context: Context) : SensorEventListener {
+class SensorHub(private val context: Context) : SensorEventListener {
     private val sensorManager =
         context.getSystemService(Context.SENSOR_SERVICE) as SensorManager
     private val sensors: List<Sensor> = sensorManager.getSensorList(Sensor.TYPE_ALL)
     private val samples = ConcurrentHashMap<String, SensorSample>()
+
+    data class BatteryInfo(
+        val level: Int,
+        val scale: Int,
+        val percent: Int,
+        val isCharging: Boolean,
+        val chargeType: String,
+        val temperature: Float,
+        val voltage: Float
+    )
+
+    fun getBattery(): BatteryInfo {
+        val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
+        val batteryStatus = context.registerReceiver(null, filter)
+
+        val level = batteryStatus?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = batteryStatus?.getIntExtra(BatteryManager.EXTRA_SCALE, 100) ?: 100
+        val percent = if (scale > 0) (level * 100) / scale else -1
+
+        val status = batteryStatus?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
+        val isCharging = status == BatteryManager.BATTERY_STATUS_CHARGING ||
+                status == BatteryManager.BATTERY_STATUS_FULL
+
+        val chargePlug = batteryStatus?.getIntExtra(BatteryManager.EXTRA_PLUGGED, -1) ?: -1
+        val chargeType = when (chargePlug) {
+            BatteryManager.BATTERY_PLUGGED_USB -> "USB"
+            BatteryManager.BATTERY_PLUGGED_AC -> "AC"
+            BatteryManager.BATTERY_PLUGGED_WIRELESS -> "Wireless"
+            else -> "None"
+        }
+
+        val temp = (batteryStatus?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, 0) ?: 0) / 10f
+        val volt = (batteryStatus?.getIntExtra(BatteryManager.EXTRA_VOLTAGE, 0) ?: 0) / 1000f
+
+        return BatteryInfo(level, scale, percent, isCharging, chargeType, temp, volt)
+    }
+
+    fun batteryJson(): String {
+        val b = getBattery()
+        return """{"percent":${b.percent},"charging":${b.isCharging},"chargeType":"${b.chargeType}","temperature":${b.temperature},"voltage":${b.voltage}}"""
+    }
 
     fun start() {
         sensors.forEach { sensor ->
