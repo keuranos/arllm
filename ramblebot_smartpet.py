@@ -946,6 +946,21 @@ class SmartPetAgent:
         print("Press Ctrl+C to stop.")
         print("="*50)
 
+        # Check if ARCore is already tracking
+        self.arcore.fetch_pose()
+        if self.arcore.tracking_state != "TRACKING":
+            print("\nARCore not tracking - starting calibration...")
+            calibrated = self.calibrate_arcore(max_time=30.0)
+            if not calibrated:
+                print("\nContinuing without tracking (limited functionality).")
+        else:
+            print("\nARCore already tracking - skipping calibration.")
+            # Still set home if we have a pose
+            pose = self.arcore.last_pose
+            if pose:
+                self.memory.enter_room("home", pose)
+                print(f"Set home at: X={pose.x:.2f}, Y={pose.y:.2f}, Z={pose.z:.2f}")
+
         # Greet when starting autonomous mode
         if self.speaker:
             self.speaker.greet()
@@ -1022,6 +1037,101 @@ class SmartPetAgent:
         self.slam.save()
         print("SLAM data saved to: slam_map.json")
 
+    def calibrate_arcore(self, max_time: float = 30.0, announce: bool = True) -> bool:
+        """
+        Calibrate ARCore by scanning the environment until tracking is achieved.
+
+        Moves the head and rotates to help ARCore see visual features.
+        Returns True if tracking was achieved, False if timeout.
+        """
+        print("\n" + "="*50)
+        print("ARCORE CALIBRATION")
+        print("Scanning environment for visual features...")
+        print("="*50)
+
+        if announce and self.speaker:
+            try:
+                # Say we're calibrating
+                SESSION.get(f"{GATEWAY_BASE}/speak?text=Kalibroin%20ympäristöä&lang=fi-FI", timeout=2)
+            except Exception:
+                pass
+
+        start_time = time.time()
+        head_positions = [90, 60, 120, 90, 45, 135, 90]  # Scan pattern
+        head_idx = 0
+        spin_phase = 0
+        last_head_move = 0
+        last_spin = 0
+
+        try:
+            do_stop()
+            do_head(90, 0)
+            time.sleep(0.3)
+        except Exception:
+            pass
+
+        while time.time() - start_time < max_time:
+            # Check ARCore status
+            pose = self.arcore.fetch_pose()
+            tracking = self.arcore.tracking_state == "TRACKING"
+
+            elapsed = time.time() - start_time
+
+            if tracking:
+                print(f"\n✓ ARCore TRACKING achieved in {elapsed:.1f}s!")
+                if pose:
+                    print(f"  Position: X={pose.x:.2f}, Y={pose.y:.2f}, Z={pose.z:.2f}")
+                    # Set this as home/origin in memory
+                    self.memory.enter_room("home", pose)
+                    print("  Set current position as 'home' origin.")
+
+                # Announce success
+                if announce and self.speaker:
+                    try:
+                        SESSION.get(f"{GATEWAY_BASE}/speak?text=Kalibrointi%20valmis&lang=fi-FI", timeout=2)
+                    except Exception:
+                        pass
+
+                do_stop()
+                do_head(90, 0)
+                return True
+
+            # Progress indicator
+            status = self.arcore.tracking_state or "UNKNOWN"
+            print(f"\r[{elapsed:5.1f}s] ARCore: {status} - scanning...", end="", flush=True)
+
+            # Move head periodically to scan vertically
+            if time.time() - last_head_move > 2.0:
+                try:
+                    do_head(head_positions[head_idx % len(head_positions)], 0)
+                    head_idx += 1
+                    last_head_move = time.time()
+                except Exception:
+                    pass
+
+            # Slow spin to see more of the room
+            if time.time() - last_spin > 3.0:
+                try:
+                    # Alternate spin direction
+                    if spin_phase % 2 == 0:
+                        do_drive(80, -80, 400, self.safety)  # Spin right
+                    else:
+                        do_drive(-80, 80, 400, self.safety)  # Spin left
+                    spin_phase += 1
+                    last_spin = time.time()
+                except Exception:
+                    pass
+
+            time.sleep(0.3)
+
+        print(f"\n✗ Calibration timeout after {max_time:.0f}s")
+        print("  ARCore could not achieve tracking.")
+        print("  Try pointing the phone at a textured surface (floor, wall, furniture).")
+
+        do_stop()
+        do_head(90, 0)
+        return False
+
 
 # ========================
 # Main Entry Point
@@ -1045,6 +1155,7 @@ def main():
     print("  /memory   - Query memory")
     print("  /slam     - Show SLAM stats")
     print("  /savemap  - Save SLAM map image")
+    print("  /calibrate - Calibrate ARCore (scan environment)")
     print("  /explore  - Start exploration")
     print("  /q, exit  - Quit")
     print()
@@ -1084,6 +1195,10 @@ def main():
 
             if cmd == "/savemap":
                 agent.save_slam_map()
+                continue
+
+            if cmd == "/calibrate":
+                agent.calibrate_arcore(max_time=30.0)
                 continue
 
             if cmd == "/explore":
