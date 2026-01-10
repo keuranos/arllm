@@ -66,12 +66,24 @@ class ArCoreTracker(private val context: Context) {
     fun latest(): ArCorePose? = latestPose
 
     private fun loop() {
+        var frameCount = 0
+        var lastLog = System.currentTimeMillis()
+
         while (running.get()) {
             try {
                 val frame = session?.update()
                 if (frame != null) {
                     updatePose(frame)
                     captureFrameForMjpeg(frame)
+                    frameCount++
+
+                    // Log status every 5 seconds
+                    val now = System.currentTimeMillis()
+                    if (now - lastLog > 5000) {
+                        val state = latestPose?.trackingState ?: "UNKNOWN"
+                        Log.i("ArCoreTracker", "ARCore running: state=$state, frames=$frameCount")
+                        lastLog = now
+                    }
                 }
                 Thread.sleep(50)
             } catch (e: Exception) {
@@ -104,6 +116,10 @@ class ArCoreTracker(private val context: Context) {
     /**
      * Capture camera frame from ARCore and feed to MjpegHub for streaming.
      */
+    private var lastCaptureLog = 0L
+    private var captureSuccessCount = 0
+    private var captureFailCount = 0
+
     private fun captureFrameForMjpeg(frame: Frame) {
         var image: Image? = null
         try {
@@ -111,71 +127,90 @@ class ArCoreTracker(private val context: Context) {
             val jpeg = imageToJpeg(image, 60)
             if (jpeg != null) {
                 MjpegHub.updateFrame(jpeg)
+                captureSuccessCount++
+            } else {
+                captureFailCount++
             }
         } catch (e: NotYetAvailableException) {
-            // Frame not ready yet, skip
+            // Frame not ready yet, skip - this is normal during startup
+            captureFailCount++
         } catch (e: Exception) {
             Log.w("ArCoreTracker", "Failed to capture frame: ${e.message}")
+            captureFailCount++
         } finally {
             image?.close()
+        }
+
+        // Log capture stats every 10 seconds
+        val now = System.currentTimeMillis()
+        if (now - lastCaptureLog > 10000) {
+            Log.i("ArCoreTracker", "MJPEG capture: success=$captureSuccessCount, fail=$captureFailCount")
+            lastCaptureLog = now
         }
     }
 
     /**
      * Convert YUV_420_888 Image to JPEG bytes.
+     * Handles various YUV formats from different devices.
      */
     private fun imageToJpeg(image: Image, quality: Int): ByteArray? {
-        if (image.format != ImageFormat.YUV_420_888) {
-            return null
-        }
+        try {
+            if (image.format != ImageFormat.YUV_420_888) {
+                Log.w("ArCoreTracker", "Unexpected image format: ${image.format}")
+                return null
+            }
 
-        val width = image.width
-        val height = image.height
+            val width = image.width
+            val height = image.height
 
-        val yPlane = image.planes[0]
-        val uPlane = image.planes[1]
-        val vPlane = image.planes[2]
+            if (width <= 0 || height <= 0) {
+                return null
+            }
 
-        val yBuffer = yPlane.buffer
-        val uBuffer = uPlane.buffer
-        val vBuffer = vPlane.buffer
+            val yPlane = image.planes[0]
+            val uPlane = image.planes[1]
+            val vPlane = image.planes[2]
 
-        val ySize = yBuffer.remaining()
-        val uSize = uBuffer.remaining()
-        val vSize = vBuffer.remaining()
+            val yBuffer = yPlane.buffer.duplicate()
+            val uBuffer = uPlane.buffer.duplicate()
+            val vBuffer = vPlane.buffer.duplicate()
 
-        // NV21 format: Y plane followed by interleaved VU
-        val nv21 = ByteArray(ySize + width * height / 2)
+            val yRowStride = yPlane.rowStride
+            val uvRowStride = uPlane.rowStride
+            val uvPixelStride = uPlane.pixelStride
 
-        // Copy Y plane
-        yBuffer.get(nv21, 0, ySize)
+            // Allocate NV21 buffer
+            val nv21 = ByteArray(width * height + width * height / 2)
 
-        // Interleave V and U (NV21 expects VUVU...)
-        val uvPixelStride = uPlane.pixelStride
-        val uvRowStride = uPlane.rowStride
+            // Copy Y plane row by row (handles rowStride != width)
+            var yOffset = 0
+            for (row in 0 until height) {
+                yBuffer.position(row * yRowStride)
+                yBuffer.get(nv21, yOffset, width)
+                yOffset += width
+            }
 
-        var uvIndex = ySize
-        for (row in 0 until height / 2) {
-            for (col in 0 until width / 2) {
-                val vIndex = row * uvRowStride + col * uvPixelStride
-                val uIndex = row * uvRowStride + col * uvPixelStride
-
-                if (vIndex < vSize && uIndex < uSize && uvIndex + 1 < nv21.size) {
-                    vBuffer.position(vIndex)
-                    uBuffer.position(uIndex)
-                    nv21[uvIndex++] = vBuffer.get()
-                    nv21[uvIndex++] = uBuffer.get()
+            // Interleave V and U for NV21 format
+            var uvOffset = width * height
+            for (row in 0 until height / 2) {
+                for (col in 0 until width / 2) {
+                    val uvIndex = row * uvRowStride + col * uvPixelStride
+                    if (uvOffset + 1 < nv21.size) {
+                        vBuffer.position(uvIndex)
+                        uBuffer.position(uvIndex)
+                        nv21[uvOffset++] = vBuffer.get()
+                        nv21[uvOffset++] = uBuffer.get()
+                    }
                 }
             }
+
+            val yuvImage = YuvImage(nv21, ImageFormat.NV21, width, height, null)
+            val out = ByteArrayOutputStream()
+            yuvImage.compressToJpeg(Rect(0, 0, width, height), quality, out)
+            return out.toByteArray()
+        } catch (e: Exception) {
+            Log.w("ArCoreTracker", "YUV to JPEG conversion failed: ${e.message}")
+            return null
         }
-
-        // Reset buffer positions
-        vBuffer.rewind()
-        uBuffer.rewind()
-
-        val yuvImage = YuvImage(nv21, ImageFormat.NV21, width, height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, width, height), quality, out)
-        return out.toByteArray()
     }
 }

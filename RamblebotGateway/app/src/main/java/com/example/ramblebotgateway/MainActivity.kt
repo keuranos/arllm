@@ -54,6 +54,14 @@ class MainActivity : ComponentActivity() {
         ttsController = TTSController(this)
         arCoreEnabled = useArCore && arCore.start()
 
+        // Log ARCore status
+        if (arCoreEnabled) {
+            android.util.Log.i("MainActivity", "ARCore started - point phone at textured surface for tracking")
+            status.text = "ARCore: Move phone to see surfaces for tracking"
+        } else {
+            android.util.Log.w("MainActivity", "ARCore not available, using CameraX")
+        }
+
         ensureActivityRecognition()
 
         // Start camera if permitted (MJPEG feed)
